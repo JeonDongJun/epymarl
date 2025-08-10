@@ -20,7 +20,7 @@ from utils.logging import get_logger
 from run import run
 
 SETTINGS["CAPTURE_MODE"] = (
-    "fd"  # set to "no" if you want to see stdout/stderr in console
+    "no"  # set to "no" if you want to see stdout/stderr in console
 )
 logger = get_logger()
 
@@ -119,7 +119,7 @@ if __name__ == "__main__":
         if param.startswith("env_args.map_name"):
             map_name = param.split("=")[1]
         elif param.startswith("env_args.key"):
-            map_name = param.split("=")[1]
+            map_name = param.split("=")[1].replace(":", "-")
 
     # Save to disk by default for sacred
     logger.info("Saving to FileStorageObserver in results/sacred.")
