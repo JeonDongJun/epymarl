@@ -32,10 +32,20 @@ class HYGMA(nn.Module):
 
         self._build_agents(self.input_shape)
         # 初始化HGCN
-        self.hgcn_in_dim = self.input_shape
+        # 새로운 입력 차원 계산: 에이전트 입력 + state_history
+        state_dim = self.args.state_dim if hasattr(self.args, 'state_dim') else 0
+        if state_dim == 0:
+            # state_dim이 설정되지 않은 경우 기본값 사용
+            state_dim = 64  # 기본 state 차원
+        
+        self.hgcn_in_dim = self.input_shape + (self.args.state_history_length * state_dim)
         self.hgcn_hidden_dim = args.hgcn_hidden_dim
         self.hgcn_num_layers = args.hgcn_num_layers
         self.hgcn_out_dim = self.args.hgcn_out_dim
+
+        print(f"[HYGMA] HGCN input dimension: {self.hgcn_in_dim}")
+        print(f"  - Agent input: {self.input_shape}")
+        print(f"  - State history: {self.args.state_history_length * state_dim}")
 
         self.hgcn = HGCN(
             in_dim=self.hgcn_in_dim,
@@ -64,48 +74,61 @@ class HYGMA(nn.Module):
         agent_inputs = self._build_inputs(ep_batch, t)
         avail_actions = ep_batch["avail_actions"][:, t]
 
-        if not test_mode and self.training_steps < self.fix_grouping_steps:
-            if t_env - self.last_clustering_step >= self.clustering_interval:
-                start_time = time.time()
-                print(f"Clustering check triggered at t_env: {t_env}, interval = {self.clustering_interval}, "
-                      f"Last clustering step: {self.last_clustering_step}, "
-                      f"Time since last clustering: {t_env - self.last_clustering_step}")
-                print(f"now groups: {self.agent_groups}")
+        # 클러스터링 로직 제거 - state_history를 직접 HGCN에 사용
+        # if not test_mode and self.training_steps < self.fix_grouping_steps:
+        #     if t_env - self.last_clustering_step >= self.clustering_interval:
+        #         start_time = time.time()
+        #         print(f"Clustering check triggered at t_env: {t_env}, interval = {self.clustering_interval}, "
+        #               f"Last clustering step: {self.last_clustering_step}, "
+        #               f"Time since last clustering: {t_env - self.last_clustering_step}")
+        #         print(f"now groups: {self.agent_groups}")
 
-                state_history = self._get_state_history(ep_batch, t)
-                groups_updated, new_groups, num_moved = self.clustering.update_groups(state_history,
-                                                                                      self.stability_threshold)
+        #         state_history = self._get_state_history(ep_batch, t)
+        #         groups_updated, new_groups, num_moved = self.clustering.update_groups(state_history,
+        #                                                                               self.stability_threshold)
 
-                if groups_updated:
-                    self.agent_groups = new_groups
-                    self.last_clustering_step = t_env
-                    # 更新HGCN的组信息，但不重置权重
-                    self.hgcn.update_groups(len(new_groups))
-                    print(
-                        f"Groups updated at t_env: {t_env}. Moved agents: {num_moved}/{self.n_agents}, new groups: {self.agent_groups}")
-                else:
-                    if num_moved > 0:
-                        print(
-                            f"Groups remained unchanged at t_env: {t_env} due to stability threshold. Potential moves: {num_moved}/{self.n_agents}")
-                    else:
-                        print(f"Groups remained unchanged at t_env: {t_env}. No potential moves detected.")
-                clustering_time = time.time() - start_time
-                print(f"Clustering at step {t_env} took {clustering_time:.4f} seconds")
+        #         if groups_updated:
+        #             self.agent_groups = new_groups
+        #             self.last_clustering_step = t_env
+        #             # 更新HGCN的组信息，但不重置权重
+        #             self.hgcn.update_groups(len(new_groups))
+        #             print(
+        #                 f"Groups updated at t_env: {t_env}. Moved agents: {num_moved}/{self.n_agents}, new groups: {self.agent_groups}")
+        #         else:
+        #             if num_moved > 0:
+        #                 print(
+        #                 f"Groups remained unchanged at t_env: {t_env} due to stability threshold. Potential moves: {num_moved}/{self.n_agents}")
+        #             else:
+        #                 print(f"Groups remained unchanged at t_env: {t_env}. No potential moves detected.")
+        #         clustering_time = time.time() - start_time
+        #         print(f"Clustering at step {t_env} took {clustering_time:.4f} seconds")
 
-        # 重塑 agent_inputs，确保其形状适合 HGCN
-        agent_inputs = agent_inputs.view(ep_batch.batch_size, self.n_agents, -1)
+        # state_history를 직접 사용하여 HGCN 입력 구성
+        state_history = self._get_state_history(ep_batch, t)
+        
+        # state_history를 HGCN 입력 형태로 변환
+        # state_history shape: (batch_size, history_length, state_dim)
+        # HGCN 입력 형태: (batch_size, num_agents, feature_dim)
+        batch_size, history_length, state_dim = state_history.shape
+        
+        # 에이전트 입력을 적절한 형태로 변환
+        agent_inputs_reshaped = agent_inputs.view(ep_batch.batch_size, self.n_agents, -1)
+        
+        # state_history를 에이전트 차원으로 확장하여 결합
+        # (batch_size, 1, history_length * state_dim) -> (batch_size, n_agents, history_length * state_dim)
+        state_history_expanded = state_history.view(batch_size, 1, -1).expand(-1, self.n_agents, -1)
+        
+        # 에이전트 입력과 state_history 결합
+        combined_agent_inputs = th.cat([agent_inputs_reshaped, state_history_expanded], dim=-1)
 
         start_time = time.time()
-        # 创建hypergraph（超图邻接矩阵）
-        hypergraph = self._create_hypergraph(self.agent_groups, ep_batch.batch_size)
-
-        # 使用HGCN处理输入
-        # HGCN输出的特征只包含组内共享信息，因此后续与原始输入结合
-        hgcn_features = self.hgcn(agent_inputs, hypergraph)
+        # 하이퍼그래프 없이 HGCN 사용 - attention만으로 처리
+        hgcn_features = self.hgcn(combined_agent_inputs)
         hgcn_time = time.time() - start_time
 
         # 特征结合：将HGCN特征与原始输入结合
-        combined_inputs = th.cat([agent_inputs, hgcn_features], dim=-1)
+        # agent_inputs는 이미 1차원으로 평탄화되어 있음
+        combined_inputs = th.cat([agent_inputs, hgcn_features.view(ep_batch.batch_size * self.n_agents, -1)], dim=-1)
 
         # 重塑 combined_inputs 以适应 RNN 的输入要求
         combined_inputs = combined_inputs.view(ep_batch.batch_size * self.n_agents, -1)
@@ -186,7 +209,15 @@ class HYGMA(nn.Module):
         """
         重新构建智能体，确保输入维度包括HGCN输出的特征。
         """
-        self.agent = agent_REGISTRY[self.args.agent](input_shape + self.args.hgcn_out_dim, self.args)
+        # 새로운 입력 차원 계산:
+        # - 원래 에이전트 입력: input_shape
+        # - HGCN 출력: args.hgcn_out_dim
+        new_input_shape = input_shape + self.args.hgcn_out_dim
+        print(f"[HYGMA] Building agent with new input shape: {new_input_shape}")
+        print(f"  - Original input: {input_shape}")
+        print(f"  - HGCN output: {self.args.hgcn_out_dim}")
+        
+        self.agent = agent_REGISTRY[self.args.agent](new_input_shape, self.args)
 
     def _build_inputs(self, batch, t):
         bs = batch.batch_size
