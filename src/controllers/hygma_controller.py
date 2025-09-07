@@ -53,7 +53,9 @@ class HYGMA(nn.Module):
             out_dim=self.hgcn_out_dim,
             num_agents=args.n_agents,
             num_groups=len(self.agent_groups),
-            num_layers=self.hgcn_num_layers
+            num_layers=self.hgcn_num_layers,
+            compression_ratio=getattr(args, 'hgcn_compression_ratio', 0.5),  # 기본값 0.5
+            compression_method=getattr(args, 'hgcn_compression_method', 'linear')  # 기본값 'linear'
         )
 
         # 参数固定
@@ -172,6 +174,51 @@ class HYGMA(nn.Module):
         history_length = min(self.args.state_history_length, t + 1)
         start = max(0, t - history_length + 1)
         history = ep_batch["state"][:, start:t + 1]
+        return history
+
+    def _get_adaptive_state_history(self, ep_batch, t, memory_threshold=0.8):
+        """메모리 사용량에 따라 적응적으로 state_history 조절"""
+        history_length = min(self.args.state_history_length, t + 1)
+        start = max(0, t - history_length + 1)
+        history = ep_batch["state"][:, start:t + 1]
+        
+        # 메모리 사용량 체크 (간단한 구현)
+        total_elements = history.numel()
+        
+        if total_elements > 10000:  # 임계값 설정
+            # 메모리가 많으면 더 적극적으로 압축
+            if history_length > 2:
+                # 짝수 인덱스만 선택 (절반으로 줄이기)
+                indices = th.arange(0, history_length, 2)
+                history = history[:, indices]
+            
+            # 상태 차원도 줄이기
+            if history.shape[-1] > 32:
+                if not hasattr(self, '_adaptive_reducer'):
+                    self._adaptive_reducer = nn.Linear(history.shape[-1], 32)
+                history = self._adaptive_reducer(history)
+        
+        return history
+
+    def _get_memory_efficient_state_history(self, ep_batch, t):
+        """메모리 효율적인 state_history 처리"""
+        history_length = min(self.args.state_history_length, t + 1)
+        start = max(0, t - history_length + 1)
+        history = ep_batch["state"][:, start:t + 1]
+        
+        # 방법 1: 가장 최근 상태만 사용 (메모리 최소)
+        if history_length > 1:
+            return history[:, -1:]
+        
+        # 방법 2: 변화량만 사용 (메모리 절약)
+        # if history_length > 1:
+        #     # 연속된 상태 간의 차이만 계산
+        #     diffs = history[:, 1:] - history[:, :-1]
+        #     # 차이의 통계량 사용
+        #     diff_stats = th.cat([diffs.mean(dim=1, keepdim=True), 
+        #                          diffs.std(dim=1, keepdim=True)], dim=-1)
+        #     return diff_stats
+        
         return history
 
     def get_attention_weights(self):
