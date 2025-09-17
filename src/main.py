@@ -18,7 +18,10 @@ import torch as th
 
 from utils.logging import get_logger
 from run import run
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
+# 나머지 코드...
 SETTINGS["CAPTURE_MODE"] = (
     "no"  # set to "no" if you want to see stdout/stderr in console
 )
