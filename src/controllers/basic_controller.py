@@ -80,8 +80,14 @@ class BasicMAC:
     def _get_input_shape(self, scheme):
         input_shape = scheme["obs"]["vshape"]
         if self.args.obs_last_action:
-            input_shape += scheme["actions_onehot"]["vshape"][0]
+            if isinstance(input_shape, tuple):
+                input_shape = input_shape[0] + scheme["actions_onehot"]["vshape"][0]
+            else:
+                input_shape += scheme["actions_onehot"]["vshape"][0]
         if self.args.obs_agent_id:
-            input_shape += self.n_agents
+            if isinstance(input_shape, tuple):
+                input_shape = input_shape[0] + self.n_agents
+            else:
+                input_shape += self.n_agents
 
         return input_shape

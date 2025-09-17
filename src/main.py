@@ -45,10 +45,13 @@ def my_main(_run, _config, _log):
 
 
 def _get_config(params, arg_name, subfolder):
+    print(f"DEBUG: Looking for {arg_name} in params: {params}")
     config_name = None
     for _i, _v in enumerate(params):
+        print(f"DEBUG: Checking param {_v}")
         if _v.split("=")[0] == arg_name:
             config_name = _v.split("=")[1]
+            print(f"DEBUG: Found config_name: {config_name}")
             del params[_i]
             break
 
@@ -67,6 +70,8 @@ def _get_config(params, arg_name, subfolder):
             except yaml.YAMLError as exc:
                 assert False, "{}.yaml error: {}".format(config_name, exc)
         return config_dict
+    else:
+        return None
 
 
 def recursive_dict_update(d, u):
@@ -103,9 +108,15 @@ if __name__ == "__main__":
     # Load algorithm and env base configs
     env_config = _get_config(params, "--env-config", "envs")
     alg_config = _get_config(params, "--config", "algs")
+    print(f"DEBUG: env_config = {env_config}")
+    print(f"DEBUG: alg_config = {alg_config}")
+    print(f"DEBUG: config_dict before update = {config_dict}")
     # config_dict = {**config_dict, **env_config, **alg_config}
-    config_dict = recursive_dict_update(config_dict, env_config)
-    config_dict = recursive_dict_update(config_dict, alg_config)
+    if env_config is not None:
+        config_dict = recursive_dict_update(config_dict, env_config)
+    if alg_config is not None:
+        config_dict = recursive_dict_update(config_dict, alg_config)
+    print(f"DEBUG: config_dict after update = {config_dict}")
 
     try:
         map_name = config_dict["env_args"]["map_name"]
