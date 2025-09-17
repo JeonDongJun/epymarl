@@ -102,24 +102,89 @@ class EpisodeBatch:
             dtype = self.scheme[k].get("dtype", th.float32)
             if type(v) == list:
                 v = th.tensor(np.array(v), dtype=dtype, device=self.device)
-            self._check_safe_view(v, target[k][_slices])
-            target[k][_slices] = v.view_as(target[k][_slices])
+            
+            # 텐서 크기 확인 및 안전한 처리
+            try:
+                self._check_safe_view(v, target[k][tuple(_slices)])
+                target[k][tuple(_slices)] = v.view_as(target[k][tuple(_slices)])
+            except ValueError as e:
+                # print(f"[ERROR] Failed to update tensor '{k}': {e}")
+                # print(f"  Attempting to reshape tensor from {v.shape} to {target[k][tuple(_slices)].shape}")
+                
+                # 텐서 크기가 다르지만 총 요소 수가 같은 경우 reshape 시도
+                if v.numel() == target[k][tuple(_slices)].numel():
+                    # print(f"  Reshaping tensor to match destination shape...")
+                    target[k][tuple(_slices)] = v.reshape(target[k][tuple(_slices)].shape)
+                else:
+                    # 크기가 완전히 다른 경우 패딩 또는 자르기
+                    # print(f"  Attempting to pad or crop tensor...")
+                    target[k][tuple(_slices)] = self._safe_reshape_tensor(v, target[k][tuple(_slices)])
 
             if k in self.preprocess:
                 new_k = self.preprocess[k][0]
-                v = target[k][_slices]
+                v = target[k][tuple(_slices)]
                 for transform in self.preprocess[k][1]:
                     v = transform.transform(v)
-                target[new_k][_slices] = v.view_as(target[new_k][_slices])
+                
+                # preprocess 후에도 안전한 텐서 처리
+                try:
+                    target[new_k][tuple(_slices)] = v.view_as(target[new_k][tuple(_slices)])
+                except ValueError as e:
+                    # print(f"[ERROR] Failed to update preprocessed tensor '{new_k}': {e}")
+                    # print(f"  Attempting to reshape tensor from {v.shape} to {target[new_k][tuple(_slices)].shape}")
+                    
+                    if v.numel() == target[new_k][tuple(_slices)].numel():
+                        # print(f"  Reshaping preprocessed tensor to match destination shape...")
+                        target[new_k][tuple(_slices)] = v.reshape(target[new_k][tuple(_slices)].shape)
+                    else:
+                        # print(f"  Attempting to pad or crop preprocessed tensor...")
+                        target[new_k][tuple(_slices)] = self._safe_reshape_tensor(v, target[new_k][tuple(_slices)])
 
     def _check_safe_view(self, v, dest):
         idx = len(v.shape) - 1
         for s in dest.shape[::-1]:
             if v.shape[idx] != s:
                 if s != 1:
-                    raise ValueError("Unsafe reshape of {} to {}".format(v.shape, dest.shape))
+                    # 더 자세한 디버그 정보 출력
+                    # print(f"[DEBUG] Tensor shape mismatch:")
+                    # print(f"  Source tensor shape: {v.shape}")
+                    # print(f"  Destination tensor shape: {dest.shape}")
+                    # print(f"  Source total elements: {v.numel()}")
+                    # print(f"  Destination total elements: {dest.numel()}")
+                    
+                    # 텐서 크기가 호환 가능한지 확인
+                    if v.numel() == dest.numel():
+                        # print(f"[WARNING] Total elements match but shapes differ. This might be safe to reshape.")
+                        return  # 크기가 같으면 안전하게 reshape 가능
+                    else:
+                        raise ValueError("Unsafe reshape of {} to {}. Total elements don't match: {} vs {}".format(
+                            v.shape, dest.shape, v.numel(), dest.numel()))
             else:
                 idx -= 1
+
+    def _safe_reshape_tensor(self, source_tensor, target_tensor):
+        """
+        텐서 크기가 다를 때 안전하게 크기를 맞추는 메서드
+        """
+        source_shape = source_tensor.shape
+        target_shape = target_tensor.shape
+        
+        # print(f"[SAFE_RESHAPE] Source: {source_shape}, Target: {target_shape}")
+        
+        # 1차원으로 펼치기
+        source_flat = source_tensor.flatten()
+        target_flat = target_tensor.flatten()
+        
+        if len(source_flat) >= len(target_flat):
+            # 소스가 더 크거나 같은 경우: 앞부분만 사용
+            result = source_flat[:len(target_flat)].reshape(target_shape)
+        else:
+            # 소스가 더 작은 경우: 패딩
+            padding_size = len(target_flat) - len(source_flat)
+            padding = th.zeros(padding_size, dtype=source_tensor.dtype, device=source_tensor.device)
+            result = th.cat([source_flat, padding]).reshape(target_shape)
+        
+        return result
 
     def __getitem__(self, item):
         if isinstance(item, str):

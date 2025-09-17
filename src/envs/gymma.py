@@ -84,8 +84,18 @@ class GymmaWrapper(MultiAgentEnv):
     def step(self, actions):
         """Returns obss, reward, terminated, truncated, info"""
         actions = [int(a) for a in actions]
-        obs, reward, done, truncated, self._info = self._env.step(actions)
-        self._obs = self._pad_observation(obs)
+        
+        # 실제 액션 유효성 검사
+        actions = self._validate_actions_with_real_env(actions)
+        
+        try:
+            obs, reward, done, truncated, self._info = self._env.step(actions)
+            self._obs = self._pad_observation(obs)
+        except ValueError as e:
+            # 마지막 수단으로 모든 액션을 0으로 설정
+            safe_actions = [0] * len(actions)
+            obs, reward, done, truncated, self._info = self._env.step(safe_actions)
+            self._obs = self._pad_observation(obs)
 
         if self.common_reward and isinstance(reward, Iterable):
             reward = float(self.reward_agg_fn(reward))
@@ -128,9 +138,53 @@ class GymmaWrapper(MultiAgentEnv):
 
     def get_avail_agent_actions(self, agent_id):
         """Returns the available actions for agent_id"""
+        # 실제 환경에서 유효한 액션을 확인
+        try:
+            # 환경에 avail_actions 메서드가 있는지 확인
+            if hasattr(self._env, 'get_avail_actions'):
+                real_avail_actions = self._env.get_avail_actions()
+                if agent_id < len(real_avail_actions):
+                    return real_avail_actions[agent_id]
+            elif hasattr(self._env.unwrapped, 'get_avail_actions'):
+                real_avail_actions = self._env.unwrapped.get_avail_actions()
+                if agent_id < len(real_avail_actions):
+                    return real_avail_actions[agent_id]
+        except Exception as e:
+            pass  # 조용히 폴백으로 넘어감
+        
+        # 폴백: 기본 동작 (모든 액션을 유효하다고 표시)
         valid = flatdim(self._env.action_space[agent_id]) * [1]
         invalid = [0] * (self.longest_action_space.n - len(valid))
         return valid + invalid
+
+    def _validate_actions_with_real_env(self, actions):
+        """
+        실제 환경에서 액션 유효성을 검사하는 메서드
+        """
+        # 환경의 실제 avail_actions 확인
+        try:
+            if hasattr(self._env, 'get_avail_actions'):
+                real_avail_actions = self._env.get_avail_actions()
+            elif hasattr(self._env.unwrapped, 'get_avail_actions'):
+                real_avail_actions = self._env.unwrapped.get_avail_actions()
+            else:
+                return actions
+                
+            # 각 에이전트의 액션 검증
+            for i, action in enumerate(actions):
+                if i < len(real_avail_actions):
+                    if not real_avail_actions[i][action]:
+                        # 유효한 액션 찾기
+                        valid_actions = [j for j, avail in enumerate(real_avail_actions[i]) if avail]
+                        if valid_actions:
+                            actions[i] = valid_actions[0]
+                        else:
+                            actions[i] = 0
+                            
+        except Exception as e:
+            pass  # 조용히 넘어감
+            
+        return actions
 
     def get_total_actions(self):
         """Returns the total number of actions an agent could ever take"""

@@ -292,6 +292,21 @@ def env_worker(remote, env_fn):
         cmd, data = remote.recv()
         if cmd == "step":
             actions = data
+            # 액션 유효성 검사 (래퍼가 아닌 경우를 대비)
+            if hasattr(env, '_validate_actions'):
+                actions = env._validate_actions(actions)
+            elif hasattr(env, 'unwrapped') and hasattr(env.unwrapped, '_validate_actions'):
+                actions = env.unwrapped._validate_actions(actions)
+            else:
+                avail_actions = env.get_avail_actions()
+                for i, action in enumerate(actions):
+                    if i < len(avail_actions) and not avail_actions[i][action]:
+                        valid_actions = [j for j, avail in enumerate(avail_actions[i]) if avail]
+                        if valid_actions:
+                            actions[i] = valid_actions[0]
+                        else:
+                            actions[i] = 0
+            
             # Take a step in the environment
             _, reward, terminated, truncated, env_info = env.step(actions)
             terminated = terminated or truncated
