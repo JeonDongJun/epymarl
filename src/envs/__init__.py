@@ -25,12 +25,14 @@ def __check_and_prepare_smac_kwargs(kwargs):
 
 def smaclite_fn(**kwargs) -> MultiAgentEnv:
     kwargs = __check_and_prepare_smac_kwargs(kwargs)
-    return SMACliteWrapper(**kwargs)
+    wrapper = SMACliteWrapper(**kwargs)
+    return wrapper
 
 
 def gymma_fn(**kwargs) -> MultiAgentEnv:
     assert "common_reward" in kwargs and "reward_scalarisation" in kwargs
-    return GymmaWrapper(**kwargs)
+    wrapper = GymmaWrapper(**kwargs)
+    return wrapper
 
 
 REGISTRY = {}
