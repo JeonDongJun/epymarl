@@ -1,4 +1,4 @@
-# --- QMIX specific parameters ---
+# --- QMIX with Fixed Role Mapping ---
 
 # use epsilon greedy action selector
 action_selector: "epsilon_greedy"
@@ -18,7 +18,7 @@ target_update_interval_or_tau: 200
 obs_agent_id: True
 obs_last_action: False
 obs_individual_obs: False
-obs_agent_role: False
+obs_agent_role: True
 
 
 # use the Q_Learner to train
@@ -35,8 +35,18 @@ hypernet_layers: 2
 hypernet_embed: 64
 
 # Role embedding parameters
-use_role_embedding: False
+use_role_embedding: True
 n_roles: 3
 role_embed_dim: 8
 
-name: "qmix"
+# Unit type extraction parameters
+extract_roles_from_obs: True
+role_extraction_method: "fixed_mapping"
+fixed_role_mapping:
+  "3m": [0, 0, 0]  # All Marines (same role)
+  "8m": [0, 1, 0, 1, 0, 1, 0, 1]  # Alternating roles
+  "2s3z": [0, 0, 1, 1, 1]  # Stalkers and Zealots
+  "3s5z": [0, 0, 0, 1, 1, 1, 1, 1]  # Stalkers and Zealots
+  "MMM": [0, 1, 2]  # Marine, Marauder, Medivac
+
+name: "qmix_role_fixed"

@@ -44,7 +44,7 @@ def run(_run, _config, _log):
     except:
         map_name = _config["env_args"]["key"]
     unique_token = (
-        f"{_config['name']}_seed{_config['seed']}_{map_name}_{datetime.datetime.now()}"
+        f"{_config['name']}_seed{_config['seed']}_{map_name}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     )
 
     args.unique_token = unique_token
@@ -117,6 +117,10 @@ def run_sequential(args, logger):
         },
         "terminated": {"vshape": (1,), "dtype": th.uint8},
     }
+    
+    # Add agent roles to scheme if role embedding is enabled
+    if getattr(args, "use_role_embedding", False):
+        scheme["agent_roles"] = {"vshape": (args.n_agents,), "dtype": th.long}
     # For individual rewards in gymmai reward is of shape (1, n_agents)
     if args.common_reward:
         scheme["reward"] = {"vshape": (1,)}

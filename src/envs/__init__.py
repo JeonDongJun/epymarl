@@ -58,3 +58,26 @@ def register_smacv2():
         return SMACv2Wrapper(**kwargs)
 
     REGISTRY["sc2v2"] = smacv2_fn
+
+
+def register_stalker_coordination():
+    from .smac_wrapper import SMACWrapper
+    from .stalker_coordination_wrapper import StalkerCoordinationRewardWrapper
+
+    def stalker_coordination_fn(**kwargs) -> MultiAgentEnv:
+        kwargs = __check_and_prepare_smac_kwargs(kwargs)
+        
+        # Extract coordination-specific parameters before creating base environment
+        coordination_reward = kwargs.pop("coordination_reward", 0.1)
+        stalker_role_id = kwargs.pop("stalker_role_id", 0)
+        
+        base_env = SMACWrapper(**kwargs)
+        
+        # Stalker 협력 리워드 래퍼 적용
+        return StalkerCoordinationRewardWrapper(
+            base_env, 
+            coordination_reward=coordination_reward,
+            stalker_role_id=stalker_role_id
+        )
+
+    REGISTRY["sc2_stalker_coordination"] = stalker_coordination_fn

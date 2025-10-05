@@ -1,3 +1,4 @@
+import os
 from smac.env import StarCraft2Env
 
 from .multiagentenv import MultiAgentEnv
@@ -5,8 +6,16 @@ from .multiagentenv import MultiAgentEnv
 
 class SMACWrapper(MultiAgentEnv):
     def __init__(self, map_name, seed, **kwargs):
+        # Set environment variables for headless mode
+        os.environ.setdefault('SC2HEADLESS', '1')
+
+        
         self.env = StarCraft2Env(map_name=map_name, seed=seed, **kwargs)
         self.episode_limit = self.env.episode_limit
+        
+        # Get environment info to set n_agents
+        env_info = self.env.get_env_info()
+        self.n_agents = env_info["n_agents"]
 
     def step(self, actions):
         """Returns obss, reward, terminated, truncated, info"""

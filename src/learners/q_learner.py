@@ -105,11 +105,18 @@ class QLearner:
 
         # Mix
         if self.mixer is not None:
+            # Get agent roles if available
+            agent_roles = None
+            if hasattr(batch.data.transition_data, 'agent_roles'):
+                agent_roles = batch.data.transition_data['agent_roles']
+            elif 'agent_roles' in batch.data.transition_data:
+                agent_roles = batch.data.transition_data['agent_roles']
+            
             chosen_action_qvals = self.mixer(
-                chosen_action_qvals, batch["state"][:, :-1]
+                chosen_action_qvals, batch["state"][:, :-1], agent_roles[:, :-1] if agent_roles is not None else None
             )
             target_max_qvals = self.target_mixer(
-                target_max_qvals, batch["state"][:, 1:]
+                target_max_qvals, batch["state"][:, 1:], agent_roles[:, 1:] if agent_roles is not None else None
             )
 
         if self.args.standardise_returns:

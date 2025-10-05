@@ -1,0 +1,12 @@
+# Stalker Coordination Environment Configuration
+
+env: "sc2_stalker_coordination"
+env_args:
+  map_name: "2s3z"
+  seed: 42
+  coordination_reward: 0.1  # Additional reward for coordinated attacks
+  stalker_role_id: 0  # Role ID for Stalkers
+
+
+common_reward: True
+reward_scalarisation: "sum"
