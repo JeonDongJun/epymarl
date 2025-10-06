@@ -139,7 +139,8 @@ class HYGMA(nn.Module):
         创建超图邻接矩阵。超图矩阵描述了组与智能体之间的连接关系，用于超图卷积。
         """
         n_groups = len(groups)
-        device = next(self.parameters()).device
+        # Get device from agent parameters
+        device = next(iter(self.agent.parameters())).device
         hypergraph = torch.zeros(batch_size, n_groups, self.n_agents, device=device)
         for i, group in enumerate(groups):
             hypergraph[:, i, group] = 1
@@ -160,7 +161,10 @@ class HYGMA(nn.Module):
         self.hidden_states = self.agent.init_hidden().unsqueeze(0).expand(batch_size, self.n_agents, -1)
 
     def parameters(self):
-        return self.agent.parameters()
+        params = list(self.agent.parameters())
+        if hasattr(self, 'role_embedding'):
+            params.extend(list(self.role_embedding.parameters()))
+        return params
 
     def clone(self, scheme, groups, args):
         new_mac = type(self)(scheme, groups, args)
@@ -171,6 +175,8 @@ class HYGMA(nn.Module):
         self.agent.load_state_dict(other_mac.agent.state_dict())
         if hasattr(self, 'hgcn') and hasattr(other_mac, 'hgcn'):
             self.hgcn.load_state_dict(other_mac.hgcn.state_dict())
+        if hasattr(self, 'role_embedding') and hasattr(other_mac, 'role_embedding'):
+            self.role_embedding.load_state_dict(other_mac.role_embedding.state_dict())
         self.agent_groups = [group[:] for group in other_mac.agent_groups]
 
     def cuda(self):
@@ -178,9 +184,16 @@ class HYGMA(nn.Module):
 
     def save_models(self, path):
         th.save(self.agent.state_dict(), "{}/agent.th".format(path))
+        if hasattr(self, 'role_embedding'):
+            th.save(self.role_embedding.state_dict(), "{}/role_embedding.th".format(path))
 
     def load_models(self, path):
         self.agent.load_state_dict(th.load("{}/agent.th".format(path), map_location=lambda storage, loc: storage))
+        if hasattr(self, 'role_embedding'):
+            try:
+                self.role_embedding.load_state_dict(th.load("{}/role_embedding.th".format(path), map_location=lambda storage, loc: storage))
+            except FileNotFoundError:
+                print("Warning: role_embedding.th not found, using default role embedding")
 
     def _build_agents(self, input_shape):
         """
@@ -199,6 +212,22 @@ class HYGMA(nn.Module):
                 inputs.append(batch["actions_onehot"][:, t-1])
         if self.args.obs_agent_id:
             inputs.append(th.eye(self.n_agents, device=batch.device).unsqueeze(0).expand(bs, -1, -1))
+        if getattr(self.args, "obs_agent_role", False):
+            # Add role embedding to agent input
+            agent_roles = None
+            if 'agent_roles' in batch.data.transition_data:
+                agent_roles = batch.data.transition_data['agent_roles']
+            
+            if agent_roles is not None:
+                role_embed_dim = getattr(self.args, "role_embed_dim", 8)
+                role_embeddings = self._get_role_embeddings(agent_roles[:, t], role_embed_dim, batch.device)
+                inputs.append(role_embeddings)
+            else:
+                # If no agent roles available, use default role (0)
+                role_embed_dim = getattr(self.args, "role_embed_dim", 8)
+                default_roles = th.zeros(bs, self.n_agents, dtype=th.long, device=batch.device)
+                role_embeddings = self._get_role_embeddings(default_roles, role_embed_dim, batch.device)
+                inputs.append(role_embeddings)
 
         inputs = th.cat([x.reshape(bs * self.n_agents, -1) for x in inputs], dim=1)
         return inputs
@@ -212,4 +241,26 @@ class HYGMA(nn.Module):
             input_shape += scheme["actions_onehot"]["vshape"][0]
         if self.args.obs_agent_id:
             input_shape += self.n_agents
+        if getattr(self.args, "obs_agent_role", False):
+            role_embed_dim = getattr(self.args, "role_embed_dim", 8)
+            input_shape += role_embed_dim
         return input_shape
+    
+    def _get_role_embeddings(self, agent_roles, role_embed_dim, device):
+        """Generate role embeddings for agents"""
+        bs = agent_roles.size(0)
+        n_roles = getattr(self.args, "n_roles", 2)  # Default to 2 roles (Stalker, Zealot)
+        
+        # Create role embeddings using learned embeddings if available
+        if not hasattr(self, 'role_embedding'):
+            # Initialize role embedding layer
+            self.role_embedding = th.nn.Embedding(n_roles, role_embed_dim).to(device)
+        
+        # Convert agent roles to tensor if needed
+        if not isinstance(agent_roles, th.Tensor):
+            agent_roles = th.tensor(agent_roles, device=device, dtype=th.long)
+        
+        # Get embeddings for each agent's role
+        role_embeddings = self.role_embedding(agent_roles)
+        
+        return role_embeddings

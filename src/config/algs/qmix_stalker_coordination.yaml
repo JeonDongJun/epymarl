@@ -4,7 +4,7 @@
 action_selector: "epsilon_greedy"
 epsilon_start: 1.0
 epsilon_finish: 0.05
-epsilon_anneal_time: 50000
+epsilon_anneal_time: 100000
 evaluation_epsilon: 0.0
 
 runner: "episode"
@@ -34,7 +34,7 @@ hypernet_embed: 64
 
 # Role embedding parameters
 use_role_embedding: True
-n_roles: 3
+n_roles: 2
 role_embed_dim: 8
 
 # Unit type extraction parameters
@@ -43,5 +43,12 @@ role_extraction_method: "fixed_mapping"
 fixed_role_mapping:
   "2s3z": [0, 0, 1, 1, 1]  # Stalkers and Zealots
   "3s5z": [0, 0, 0, 1, 1, 1, 1, 1]  # Stalkers and Zealots
+  "3s5z_vs_3s6z": [0, 0, 0, 1, 1, 1, 1, 1]  # Stalkers and Zealots
+
+lr: 0.0005 
+batch_size: 32
+target_update_interval: 200
+optim_alpha: 0.99
+optim_eps: 0.00001
 
 name: "qmix_stalker_coordination"

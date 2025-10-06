@@ -8,6 +8,8 @@ epsilon_anneal_time: 50000
 evaluation_epsilon: 0.0
 
 runner: "episode"
+# runner: "parallel"
+# batch_size_run: 8
 
 buffer_size: 5000
 

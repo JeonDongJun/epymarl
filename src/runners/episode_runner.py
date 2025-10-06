@@ -172,6 +172,41 @@ class EpisodeRunner:
 
         return self.batch
 
+    def _get_agent_roles(self):
+        """Get agent roles based on map configuration"""
+        try:
+            # Get map name from environment args
+            map_name = self.args.env_args.get('map_name', '')
+            
+            # Role mapping from algorithm config
+            if hasattr(self.args, 'fixed_role_mapping') and self.args.fixed_role_mapping:
+                role_mapping = self.args.fixed_role_mapping.get(map_name)
+                if role_mapping:
+                    return role_mapping
+            
+            # Default role mapping based on map name
+            default_role_mappings = {
+                '2s3z': [0, 0, 1, 1, 1],  # 2 Stalkers, 3 Zealots
+                '3s5z': [0, 0, 0, 1, 1, 1, 1, 1],  # 3 Stalkers, 5 Zealots
+                '3s5z_vs_3s6z': [0, 0, 0, 1, 1, 1, 1, 1],  # 3 Stalkers, 5 Zealots vs 3 Stalkers, 6 Zealots
+                '2s_vs_1sc': [0, 0],  # 2 Stalkers vs 1 Stalker, 1 Colossus
+                '3s_vs_3z': [0, 0, 0],  # 3 Stalkers vs 3 Zealots
+                '3s_vs_4z': [0, 0, 0],  # 3 Stalkers vs 4 Zealots
+                '3s_vs_5z': [0, 0, 0],  # 3 Stalkers vs 5 Zealots
+            }
+            
+            role_mapping = default_role_mappings.get(map_name)
+            if role_mapping:
+                return role_mapping
+            
+            # If no specific mapping found, return None (no role embedding)
+            print(f"Warning: No role mapping found for map '{map_name}'. Role embedding disabled.")
+            return None
+            
+        except Exception as e:
+            print(f"Warning: Could not get agent roles: {e}")
+            return None
+
     def _log(self, returns, stats, prefix):
         if self.args.common_reward:
             self.logger.log_stat(prefix + "return_mean", np.mean(returns), self.t_env)

@@ -76,14 +76,18 @@ class BasicMAC:
         if getattr(self.args, "obs_agent_role", False):
             # Add role embedding to agent input
             agent_roles = None
-            if hasattr(batch.data.transition_data, 'agent_roles'):
-                agent_roles = batch.data.transition_data['agent_roles']
-            elif 'agent_roles' in batch.data.transition_data:
+            if 'agent_roles' in batch.data.transition_data:
                 agent_roles = batch.data.transition_data['agent_roles']
             
             if agent_roles is not None:
                 role_embed_dim = getattr(self.args, "role_embed_dim", 8)
                 role_embeddings = self._get_role_embeddings(agent_roles[:, t], role_embed_dim, batch.device)
+                inputs.append(role_embeddings)
+            else:
+                # If no agent roles available, use default role (0)
+                role_embed_dim = getattr(self.args, "role_embed_dim", 8)
+                default_roles = th.zeros(bs, self.n_agents, dtype=th.long, device=batch.device)
+                role_embeddings = self._get_role_embeddings(default_roles, role_embed_dim, batch.device)
                 inputs.append(role_embeddings)
 
         inputs = th.cat([x.reshape(bs*self.n_agents, -1) for x in inputs], dim=1)
@@ -101,23 +105,30 @@ class BasicMAC:
                 input_shape = input_shape[0] + self.n_agents
             else:
                 input_shape += self.n_agents
+        if getattr(self.args, "obs_agent_role", False):
+            role_embed_dim = getattr(self.args, "role_embed_dim", 8)
+            if isinstance(input_shape, tuple):
+                input_shape = input_shape[0] + role_embed_dim
+            else:
+                input_shape += role_embed_dim
 
         return input_shape
     
     def _get_role_embeddings(self, agent_roles, role_embed_dim, device):
         """Generate role embeddings for agents"""
         bs = agent_roles.size(0)
-        # Create a simple role embedding lookup table
-        # For now, we'll use a simple one-hot encoding approach
-        # In practice, this could be learned embeddings
-        n_roles = getattr(self.args, "n_roles", self.n_agents)
-        role_embeddings = th.zeros(bs, self.n_agents, role_embed_dim, device=device)
+        n_roles = getattr(self.args, "n_roles", 2)  # Default to 2 roles (Stalker, Zealot)
         
-        for i in range(bs):
-            for j in range(self.n_agents):
-                role_id = agent_roles[i, j].item()
-                if role_id < n_roles:
-                    # Simple one-hot encoding for role
-                    role_embeddings[i, j, role_id % role_embed_dim] = 1.0
-                    
+        # Create role embeddings using learned embeddings if available
+        if not hasattr(self, 'role_embedding'):
+            # Initialize role embedding layer
+            self.role_embedding = th.nn.Embedding(n_roles, role_embed_dim).to(device)
+        
+        # Convert agent roles to tensor if needed
+        if not isinstance(agent_roles, th.Tensor):
+            agent_roles = th.tensor(agent_roles, device=device, dtype=th.long)
+        
+        # Get embeddings for each agent's role
+        role_embeddings = self.role_embedding(agent_roles)
+        
         return role_embeddings

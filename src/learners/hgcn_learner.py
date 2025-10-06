@@ -156,8 +156,13 @@ class HGCNQLearner:
 
         # Mix
         if self.mixer is not None:
-            chosen_action_qvals = self.mixer(chosen_action_qvals, batch["state"][:, :-1])
-            target_max_qvals = self.target_mixer(target_max_qvals, batch["state"][:, 1:])
+            # Get agent roles if available
+            agent_roles = None
+            if 'agent_roles' in batch.data.transition_data:
+                agent_roles = batch.data.transition_data['agent_roles']
+            
+            chosen_action_qvals = self.mixer(chosen_action_qvals, batch["state"][:, :-1], agent_roles)
+            target_max_qvals = self.target_mixer(target_max_qvals, batch["state"][:, 1:], agent_roles)
 
         # Calculate 1-step Q-Learning targets
         targets = rewards + self.args.gamma * (1 - terminated) * target_max_qvals
