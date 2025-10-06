@@ -128,8 +128,20 @@ class GymmaWrapper(MultiAgentEnv):
 
     def get_avail_agent_actions(self, agent_id):
         """Returns the available actions for agent_id"""
-        valid = flatdim(self._env.action_space[agent_id]) * [1]
-        invalid = [0] * (self.longest_action_space.n - len(valid))
+        # smaclite 환경의 경우, 실제 사용 가능한 액션을 확인
+        if hasattr(self._env.unwrapped, 'get_avail_actions'):
+            try:
+                avail_actions = self._env.unwrapped.get_avail_actions()
+                if agent_id < len(avail_actions):
+                    # 실제 사용 가능한 액션을 반환
+                    return avail_actions[agent_id].tolist()
+            except:
+                pass
+        
+        # Fallback: 기본 액션 마스크 생성
+        agent_action_size = flatdim(self._env.action_space[agent_id])
+        valid = [1] * agent_action_size
+        invalid = [0] * (self.longest_action_space.n - agent_action_size)
         return valid + invalid
 
     def get_total_actions(self):
