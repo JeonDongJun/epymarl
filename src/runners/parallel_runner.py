@@ -5,7 +5,7 @@ import numpy as np
 
 from components.episode_buffer import EpisodeBatch
 from envs import REGISTRY as env_REGISTRY
-from envs import register_smac, register_smacv2
+from envs import register_smac, register_smacv2, register_stalker_coordination
 
 
 # Based (very) heavily on SubprocVecEnv from OpenAI Baselines
@@ -27,6 +27,8 @@ class ParallelRunner:
             register_smac()
         elif self.args.env == "sc2v2":
             register_smacv2()
+        elif self.args.env == "sc2_stalker_coordination":
+            register_stalker_coordination()
 
         env_fn = env_REGISTRY[self.args.env]
         env_args = [self.args.env_args.copy() for _ in range(self.batch_size)]
