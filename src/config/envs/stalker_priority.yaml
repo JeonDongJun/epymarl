@@ -1,0 +1,47 @@
+# Stalker Priority Attack Environment Configuration
+# 적의 Stalker를 우선적으로 공격하도록 하는 환경 설정
+
+env: "sc2_target_priority"
+env_args:
+  map_name: "3s5z_vs_3s6z"
+  seed: 42
+  priority_target: "stalker"  # Stalker를 우선 타겟으로 설정
+  priority_reward: 0.2  # 우선 타겟 공격 시 추가 보상
+  stalker_role_id: 0  # Stalker의 role ID
+  zealot_role_id: 1  # Zealot의 role ID
+  # 기본 SMAC 설정
+  continuing_episode: False
+  difficulty: "7"
+  game_version: null
+  move_amount: 2
+  obs_all_health: True
+  obs_instead_of_state: False
+  obs_last_action: False
+  obs_own_health: True
+  obs_pathing_grid: False
+  obs_terrain_height: False
+  obs_timestep_number: False
+  reward_death_value: 10
+  reward_defeat: 0
+  reward_negative_scale: 0.5
+  reward_only_positive: True
+  reward_scale: True
+  reward_scale_rate: 20
+  reward_sparse: False
+  reward_win: 200
+  replay_dir: ""
+  replay_prefix: ""
+  state_last_action: False
+  state_timestep_number: False
+  step_mul: 8
+  heuristic_ai: False
+  heuristic_rest: False
+  debug: False
+
+test_greedy: True
+test_nepisode: 100
+test_interval: 50000
+log_interval: 50000
+runner_log_interval: 10000
+learner_log_interval: 10000
+t_max: 2050000

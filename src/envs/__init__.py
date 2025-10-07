@@ -81,3 +81,30 @@ def register_stalker_coordination():
         )
 
     REGISTRY["sc2_stalker_coordination"] = stalker_coordination_fn
+
+
+def register_target_priority():
+    from .smac_wrapper import SMACWrapper
+    from .target_priority_wrapper import TargetPriorityRewardWrapper
+
+    def target_priority_fn(**kwargs) -> MultiAgentEnv:
+        kwargs = __check_and_prepare_smac_kwargs(kwargs)
+        
+        # Extract priority-specific parameters before creating base environment
+        priority_target = kwargs.pop("priority_target", "zealot")
+        priority_reward = kwargs.pop("priority_reward", 0.2)
+        stalker_role_id = kwargs.pop("stalker_role_id", 0)
+        zealot_role_id = kwargs.pop("zealot_role_id", 1)
+        
+        base_env = SMACWrapper(**kwargs)
+        
+        # 타겟 우선순위 리워드 래퍼 적용
+        return TargetPriorityRewardWrapper(
+            base_env, 
+            priority_target=priority_target,
+            priority_reward=priority_reward,
+            stalker_role_id=stalker_role_id,
+            zealot_role_id=zealot_role_id
+        )
+
+    REGISTRY["sc2_target_priority"] = target_priority_fn

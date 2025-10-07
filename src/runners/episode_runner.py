@@ -4,7 +4,7 @@ import numpy as np
 
 from components.episode_buffer import EpisodeBatch
 from envs import REGISTRY as env_REGISTRY
-from envs import register_smac, register_smacv2, register_stalker_coordination
+from envs import register_smac, register_smacv2, register_stalker_coordination, register_target_priority
 
 
 class EpisodeRunner:
@@ -22,6 +22,8 @@ class EpisodeRunner:
             register_smacv2()
         elif self.args.env == "sc2_stalker_coordination":
             register_stalker_coordination()
+        elif self.args.env == "sc2_target_priority":
+            register_target_priority()
 
         self.env = env_REGISTRY[self.args.env](
             **self.args.env_args,
