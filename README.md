@@ -41,15 +41,17 @@ Some scenarios benefit from providing different reward functions to subsets of a
 
 To enable the feature:
 
-1. Set `common_reward=False` so that the framework expects one reward value per agent.
+1. Leave `common_reward` at the value required by your environment (e.g. SMAC and SMACv2 **must** keep `common_reward=True`,
+   while Gymnasium-based tasks that natively emit individual rewards can set it to `False`).
 2. Set `group_reward_mode=True` and define one or more profiles in `group_reward_profiles`.
 
 Each profile specifies the agents that should receive it and how the reward is shaped. The currently supported shaping function is a weighted sum of the base environment reward and any additional statistics exposed through the environment `info` dictionary (e.g. the StarCraft II interface reports `delta_enemy_hp`, `delta_ally_hp`, `dead_enemies`, etc.). Missing statistics fall back to `default_missing_value` (defaults to `0.0`) and trigger a one-time warning.
 
+When running with `common_reward=True`, EPyMARL first computes group-specific rewards internally and then aggregates them back to a single scalar (using the configured `reward_scalarisation`) before passing them to the learner. This allows SMAC users to benefit from the shaping without violating the environment constraint that only a single reward signal is supported.
+
 Example snippet (taken from `config/algs/hygma.yaml`):
 
 ```yaml
-common_reward: False
 group_reward_mode: True
 group_reward_default_profile: "aggressive"
 group_reward_profiles:

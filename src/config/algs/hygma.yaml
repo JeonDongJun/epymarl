@@ -19,7 +19,7 @@ runner: "episode"# Runs 1 env for an episode
 
 mac: "hygma_mac"
 
-# Reward shaping (set group_reward_mode to True and common_reward to False to activate)
+# Reward shaping (set group_reward_mode to True; works even when common_reward must stay True for SMAC)
 group_reward_mode: False
 group_reward_default_profile: "aggressive"
 group_reward_profiles:

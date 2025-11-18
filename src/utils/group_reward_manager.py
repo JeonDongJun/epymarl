@@ -89,20 +89,18 @@ class GroupRewardManager:
         self.logger = logger.console_logger if logger is not None else None
         self.enabled = getattr(args, "group_reward_mode", False)
         self.n_agents = getattr(args, "n_agents", None)
+        self.common_reward = getattr(args, "common_reward", True)
+        self.reward_scalarisation = getattr(args, "reward_scalarisation", "mean")
         self.profile_functions: Dict[str, WeightedRewardFunction] = {}
         self.agent_to_profile: Dict[int, str] = {}
         self._missing_warned: set[str] = set()
+        self._invalid_scalarisation_warned = False
 
         if not self.enabled:
             return
 
         if self.n_agents is None:
             raise ValueError("GroupRewardManager requires `args.n_agents` to be set before initialisation.")
-
-        if getattr(args, "common_reward", True):
-            raise ValueError(
-                "Group reward mode requires `common_reward` to be False so each agent can receive a shaped reward."
-            )
 
         profiles_config = getattr(args, "group_reward_profiles", None)
         if not profiles_config:
@@ -166,9 +164,11 @@ class GroupRewardManager:
         if not self.enabled:
             return reward
 
+        input_was_scalar = np.isscalar(reward)
         per_agent_reward = np.asarray(reward, dtype=np.float32)
         if per_agent_reward.ndim == 0:
             per_agent_reward = np.full(self.n_agents, float(per_agent_reward))
+            input_was_scalar = True
         elif per_agent_reward.size != self.n_agents:
             per_agent_reward = np.resize(per_agent_reward, self.n_agents)
 
@@ -191,7 +191,27 @@ class GroupRewardManager:
                 )
             shaped_rewards[agent_id] = cache[profile]
 
+        if self.common_reward:
+            if input_was_scalar:
+                return float(np.mean(shaped_rewards))
+            return self._aggregate_shaped_rewards(shaped_rewards)
+
         return shaped_rewards
+
+    def _aggregate_shaped_rewards(self, shaped_rewards: np.ndarray) -> float:
+        if self.reward_scalarisation == "sum":
+            return float(np.sum(shaped_rewards))
+        if self.reward_scalarisation == "mean":
+            return float(np.mean(shaped_rewards))
+
+        if self.logger is not None and not self._invalid_scalarisation_warned:
+            self.logger.warning(
+                "Unknown reward_scalarisation '%s'. Falling back to mean aggregation for group rewards.",
+                self.reward_scalarisation,
+            )
+            self._invalid_scalarisation_warned = True
+
+        return float(np.mean(shaped_rewards))
 
     def _handle_missing_info(self, key: str) -> None:
         if self.logger is None or key in self._missing_warned:
