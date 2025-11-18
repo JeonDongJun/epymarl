@@ -35,6 +35,46 @@ python src/main.py --config=mappo --env-config=gymma with env_args.time_limit=50
 ```
 When using the `common_reward=True` setup in environments which naturally provide individual rewards, by default we scalarise the rewards into a common reward by summing up all rewards. This is now configurable and we support the mean operation as an alternative scalarisation. To use the mean scalarisation, set `reward_scalarisation="mean"`.
 
+### Group-specific reward shaping
+
+Some scenarios benefit from providing different reward functions to subsets of agents—for example, when using the HYGMA controller to train aggressive and defensive squads independently on StarCraft II maps such as `3s5z` or `3s6z`. EPyMARL now supports configurable reward profiles that can be assigned to groups of agents.
+
+To enable the feature:
+
+1. Leave `common_reward` at the value required by your environment (e.g. SMAC and SMACv2 **must** keep `common_reward=True`,
+   while Gymnasium-based tasks that natively emit individual rewards can set it to `False`).
+2. Set `group_reward_mode=True` and define one or more profiles in `group_reward_profiles`.
+
+Each profile specifies the agents that should receive it and how the reward is shaped. The currently supported shaping function is a weighted sum of the base environment reward and any additional statistics exposed through the environment `info` dictionary (e.g. the StarCraft II interface reports `delta_enemy_hp`, `delta_ally_hp`, `dead_enemies`, etc.). Missing statistics fall back to `default_missing_value` (defaults to `0.0`) and trigger a one-time warning.
+
+When running with `common_reward=True`, EPyMARL first computes group-specific rewards internally and then aggregates them back to a single scalar (using the configured `reward_scalarisation`) before passing them to the learner. This allows SMAC users to benefit from the shaping without violating the environment constraint that only a single reward signal is supported.
+
+Example snippet (taken from `config/algs/hygma.yaml`):
+
+```yaml
+group_reward_mode: True
+group_reward_default_profile: "aggressive"
+group_reward_profiles:
+  - name: "aggressive"
+    agents: [0, 1, 2, 3]
+    function:
+      type: "weighted_sum"
+      base_reward_weight: 1.0
+      info_weights:
+        delta_enemy_hp: 0.35   # bonus for dealing damage
+        delta_ally_hp: -0.15   # penalty for taking damage
+  - name: "defensive"
+    agents: [4, 5, 6, 7]
+    function:
+      type: "weighted_sum"
+      base_reward_weight: 1.0
+      info_weights:
+        delta_enemy_hp: 0.15
+        delta_ally_hp: -0.35   # larger penalty encourages preservation
+```
+
+With this configuration, agents `0-3` are rewarded for aggressive play (placing extra emphasis on enemy damage), while agents `4-7` receive stronger penalties for losing health, resulting in more defensive behaviours. Any agents not listed inherit the profile named in `group_reward_default_profile`.
+
 ### Weights and Biases (W&B) Logging
 We now support logging to W&B! To log data to W&B, you need to install the library with `pip install wandb` and setup W&B (see their [documentation](https://docs.wandb.ai/quickstart)). After, follow [our instructions](#weights-and-biases).
 
