@@ -5,6 +5,7 @@ import numpy as np
 from components.episode_buffer import EpisodeBatch
 from envs import REGISTRY as env_REGISTRY
 from envs import register_smac, register_smacv2
+from utils.group_reward_manager import GroupRewardManager
 
 
 class EpisodeRunner:
@@ -38,6 +39,7 @@ class EpisodeRunner:
 
         # Log the first run
         self.log_train_stats_t = -1000000
+        self.reward_manager = None
 
     def setup(self, scheme, groups, preprocess, mac):
         self.new_batch = partial(
@@ -50,6 +52,7 @@ class EpisodeRunner:
             device=self.args.device,
         )
         self.mac = mac
+        self.reward_manager = GroupRewardManager(self.args, logger=self.logger)
 
     def get_env_info(self):
         return self.env.get_env_info()
@@ -91,6 +94,8 @@ class EpisodeRunner:
             )
 
             _, reward, terminated, truncated, env_info = self.env.step(actions[0])
+            if self.reward_manager is not None:
+                reward = self.reward_manager.apply(reward, env_info)
             terminated = terminated or truncated
             if test_mode and self.args.render:
                 self.env.render()
