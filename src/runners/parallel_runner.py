@@ -6,6 +6,7 @@ import numpy as np
 from components.episode_buffer import EpisodeBatch
 from envs import REGISTRY as env_REGISTRY
 from envs import register_smac, register_smacv2
+from utils.group_reward_manager import GroupRewardManager
 
 
 # Based (very) heavily on SubprocVecEnv from OpenAI Baselines
@@ -60,6 +61,7 @@ class ParallelRunner:
         self.test_stats = {}
 
         self.log_train_stats_t = -100000
+        self.reward_manager = None
 
     def setup(self, scheme, groups, preprocess, mac):
         self.new_batch = partial(
@@ -75,6 +77,7 @@ class ParallelRunner:
         self.scheme = scheme
         self.groups = groups
         self.preprocess = preprocess
+        self.reward_manager = GroupRewardManager(self.args, logger=self.logger)
 
     def get_env_info(self):
         return self.env_info
@@ -172,9 +175,16 @@ class ParallelRunner:
                 if not terminated[idx]:
                     data = parent_conn.recv()
                     # Remaining data for this current timestep
-                    post_transition_data["reward"].append((data["reward"],))
+                    shaped_reward = (
+                        self.reward_manager.apply(data["reward"], data["info"])
+                        if self.reward_manager is not None
+                        else data["reward"]
+                    )
+                    data["reward"] = shaped_reward
 
-                    episode_returns[idx] += data["reward"]
+                    post_transition_data["reward"].append((shaped_reward,))
+
+                    episode_returns[idx] += shaped_reward
                     episode_lengths[idx] += 1
                     if not test_mode:
                         self.env_steps_this_run += 1

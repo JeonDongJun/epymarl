@@ -19,6 +19,27 @@ runner: "episode"# Runs 1 env for an episode
 
 mac: "hygma_mac"
 
+# Reward shaping (set group_reward_mode to True and common_reward to False to activate)
+group_reward_mode: False
+group_reward_default_profile: "aggressive"
+group_reward_profiles:
+  - name: "aggressive"
+    agents: [0, 1, 2, 3]
+    function:
+      type: "weighted_sum"
+      base_reward_weight: 1.0
+      info_weights:
+        delta_enemy_hp: 0.35
+        delta_ally_hp: -0.15
+  - name: "defensive"
+    agents: [4, 5, 6, 7]
+    function:
+      type: "weighted_sum"
+      base_reward_weight: 1.0
+      info_weights:
+        delta_enemy_hp: 0.15
+        delta_ally_hp: -0.35
+
 use_rnn: True
 batch_size: 128 # Number of episodes to train on
 buffer_size: 5000 # Size of the replay buffer
